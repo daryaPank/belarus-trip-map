@@ -126,34 +126,91 @@
   document.getElementById("cancelBtn").addEventListener("click",()=>modal.classList.remove("open"));
 
   async function geocode(name,address,city){
-    const q=[address||name,cities[city].name,"Belarus"].filter(Boolean).join(", ");
-    const u=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`;
-    const r=await fetch(u,{headers:{"Accept-Language":"ru"}});
-    if(!r.ok)throw new Error("Не удалось найти координаты");
-    const d=await r.json();if(!d.length)throw new Error("Адрес не найден — укажи координаты вручную");
-    return{lat:Number(d[0].lat),lon:Number(d[0].lon)};
+    const cityName=cities[city].name;
+    const cleanAddress=String(address||"").trim();
+    const cleanName=String(name||"").trim();
+
+    const candidates=[
+      `${cleanAddress}, ${cityName}, Беларусь`,
+      `улица ${cleanAddress}, ${cityName}, Беларусь`,
+      `${cleanName}, ${cleanAddress}, ${cityName}, Беларусь`,
+      `${cleanName}, ${cityName}, Беларусь`
+    ].filter((q,i,a)=>q && a.indexOf(q)===i);
+
+    for(const q of candidates){
+      const u=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=by&q=${encodeURIComponent(q)}`;
+      try{
+        const r=await fetch(u,{headers:{"Accept-Language":"ru"}});
+        if(!r.ok) continue;
+        const d=await r.json();
+        if(d.length) return {lat:Number(d[0].lat),lon:Number(d[0].lon)};
+      }catch(_){}
+    }
+
+    throw new Error("Не нашла адрес. Попробуй написать улицу и дом, например: Комсомольская 32.");
+  }
+
+  function autoNote(city,category,address,vegan){
+    const cityName=cities[city].name;
+    const labels={
+      history:"Историко-архитектурная точка",
+      beautiful:"Красивая локация",
+      park:"Парк или зелёная зона",
+      food:"Место для еды",
+      coffee:"Кофейня"
+    };
+    let text=`${labels[category]||"Интересная точка"} в ${cityName}.`;
+    if(address) text+=` Адрес: ${address}.`;
+    if(vegan&&(category==="food"||category==="coffee")) text+=` 🌿 Отмечено как vegan-friendly.`;
+    return text;
   }
 
   form.addEventListener("submit",async e=>{
-    e.preventDefault();status.className="form-status";status.textContent="Сохраняю…";
-    const fd=new FormData(form),category=fd.get("category");
-    let lat=parseFloat(String(fd.get("lat")).replace(",",".")),lon=parseFloat(String(fd.get("lon")).replace(",","."));
+    e.preventDefault();
+    status.className="form-status";
+    status.textContent="Проверяю адрес…";
+
+    const fd=new FormData(form);
+    const category=String(fd.get("category"));
+    const city=String(fd.get("city"));
+    const name=String(fd.get("name")||"").trim();
+    const address=String(fd.get("address")||"").trim();
+    const sourceUrl=String(fd.get("source")||"").trim()||null;
+    const vegan=(category==="food"||category==="coffee")&&fd.get("vegan")==="on";
+
     try{
-      if(!Number.isFinite(lat)||!Number.isFinite(lon)){
-        const g=await geocode(fd.get("name"),fd.get("address"),fd.get("city"));lat=g.lat;lon=g.lon;
-      }
+      const g=await geocode(name,address,city);
+      const manualNote=String(fd.get("note")||"").trim();
       const row={
-        name:String(fd.get("name")).trim(),city:String(fd.get("city")),category:String(category),
-        address:String(fd.get("address")||"").trim(),lat,lon,source_url:String(fd.get("source")||"").trim()||null,
-        note:String(fd.get("note")||"").trim(),vegan:(category==="food"||category==="coffee")&&fd.get("vegan")==="on"
+        name,
+        city,
+        category,
+        address,
+        lat:g.lat,
+        lon:g.lon,
+        source_url:sourceUrl,
+        note:manualNote||autoNote(city,category,address,vegan),
+        vegan
       };
-      if(!apiReady())throw new Error("Сначала подключи Supabase в config.js");
+
+      if(!apiReady()) throw new Error("Сначала подключи Supabase в config.js");
+      status.textContent="Сохраняю…";
+
       const r=await fetch(`${cfg.supabaseUrl}/rest/v1/places`,{
-        method:"POST",headers:{...apiHeaders(),"Prefer":"return=representation"},body:JSON.stringify(row)
+        method:"POST",
+        headers:{...apiHeaders(),"Prefer":"return=representation"},
+        body:JSON.stringify(row)
       });
-      if(!r.ok)throw new Error(await r.text());
-      const created=await r.json();places.push(created[0]);modal.classList.remove("open");selectCity(row.city);
-    }catch(err){status.className="form-status error";status.textContent=err.message||"Ошибка сохранения"}
+      if(!r.ok) throw new Error(await r.text());
+
+      const created=await r.json();
+      places.push(created[0]);
+      modal.classList.remove("open");
+      selectCity(row.city);
+    }catch(err){
+      status.className="form-status error";
+      status.textContent=err.message||"Ошибка сохранения";
+    }
   });
 
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
