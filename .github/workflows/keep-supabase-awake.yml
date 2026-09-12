@@ -1,14 +1,18 @@
-# Supabase keepalive
+name: Keep Supabase awake
 
-Добавьте файл `.github/workflows/keep-supabase-awake.yml` в репозиторий.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
 
-Нужны два GitHub Actions secret:
-
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY`
-
-Workflow запускается раз в сутки в 06:17 UTC и делает безопасный read-only запрос:
-`GET /rest/v1/places?select=id&limit=1`
-
-Также его можно запустить вручную через:
-Actions → Keep Supabase awake → Run workflow
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error             --get             "${SUPABASE_URL}/rest/v1/places"             --data-urlencode "select=id"             --data-urlencode "limit=1"             -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}"             -H "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}"             -H "Accept: application/json"             > /dev/null
