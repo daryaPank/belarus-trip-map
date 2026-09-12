@@ -86,6 +86,14 @@
     document.getElementById("placeTags").innerHTML=tags.join("");
     document.getElementById("placeText").textContent=p.note||"";
     document.getElementById("placeAddress").textContent=p.address||"";
+    const hours=document.getElementById("placeHours");
+    if(p.opening_hours){
+      hours.textContent=`🕒 ${p.opening_hours}`;
+      hours.hidden=false;
+    }else{
+      hours.textContent="";
+      hours.hidden=true;
+    }
     const s=document.getElementById("placeSource");
     s.innerHTML=p.source_url?`<a href="${escapeHtml(p.source_url)}" target="_blank" rel="noopener">Источник</a>`:"";
     sheet.classList.add("open");render();
@@ -137,21 +145,50 @@
       `${cleanName}, ${cityName}, Беларусь`
     ].filter((q,i,a)=>q && a.indexOf(q)===i);
 
-    for(const q of candidates){
+    async function tryNominatim(q){
       const u=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=by&q=${encodeURIComponent(q)}`;
-      try{
-        const r=await fetch(u,{headers:{"Accept-Language":"ru"}});
-        if(!r.ok) continue;
-        const d=await r.json();
-        if(d.length) return {lat:Number(d[0].lat),lon:Number(d[0].lon)};
-      }catch(_){}
+      const r=await fetch(u,{headers:{"Accept-Language":"ru"}});
+      if(!r.ok) return null;
+      const d=await r.json();
+      if(!Array.isArray(d)||!d.length) return null;
+      const lat=Number(d[0].lat),lon=Number(d[0].lon);
+      return Number.isFinite(lat)&&Number.isFinite(lon)?{lat,lon}:null;
     }
 
-    throw new Error("Не нашла адрес. Попробуй написать улицу и дом, например: Комсомольская 32.");
+    async function tryPhoton(q){
+      const u=`https://photon.komoot.io/api/?limit=1&q=${encodeURIComponent(q)}`;
+      const r=await fetch(u,{headers:{"Accept-Language":"ru"}});
+      if(!r.ok) return null;
+      const d=await r.json();
+      const coords=d?.features?.[0]?.geometry?.coordinates;
+      if(!Array.isArray(coords)||coords.length<2) return null;
+      const lon=Number(coords[0]),lat=Number(coords[1]);
+      return Number.isFinite(lat)&&Number.isFinite(lon)?{lat,lon}:null;
+    }
+
+    let hadNetworkFailure=false;
+
+    for(const q of candidates){
+      try{
+        const hit=await tryNominatim(q);
+        if(hit) return hit;
+      }catch(_){ hadNetworkFailure=true; break; }
+    }
+
+    for(const q of candidates){
+      try{
+        const hit=await tryPhoton(q);
+        if(hit) return hit;
+      }catch(_){ hadNetworkFailure=true; break; }
+    }
+
+    if(hadNetworkFailure){
+      throw new Error("Не удалось проверить адрес из-за сетевой ошибки. Попробуй ещё раз чуть позже.");
+    }
+    throw new Error("Не нашла адрес. Попробуй написать только улицу и дом, например: Комсомольская 32.");
   }
 
-  function autoNote(city,category,address,vegan){
-    const cityName=cities[city].name;
+  function autoNote(city,category,vegan){
     const labels={
       history:"Историко-архитектурная точка",
       beautiful:"Красивая локация",
@@ -159,8 +196,7 @@
       food:"Место для еды",
       coffee:"Кофейня"
     };
-    let text=`${labels[category]||"Интересная точка"} в ${cityName}.`;
-    if(address) text+=` Адрес: ${address}.`;
+    let text=`${labels[category]||"Интересная точка"} в ${cities[city].name}.`;
     if(vegan&&(category==="food"||category==="coffee")) text+=` 🌿 Отмечено как vegan-friendly.`;
     return text;
   }
@@ -176,11 +212,13 @@
     const name=String(fd.get("name")||"").trim();
     const address=String(fd.get("address")||"").trim();
     const sourceUrl=String(fd.get("source")||"").trim()||null;
+    const openingHours=String(fd.get("opening_hours")||"").trim();
     const vegan=(category==="food"||category==="coffee")&&fd.get("vegan")==="on";
 
     try{
       const g=await geocode(name,address,city);
       const manualNote=String(fd.get("note")||"").trim();
+
       const row={
         name,
         city,
@@ -189,19 +227,20 @@
         lat:g.lat,
         lon:g.lon,
         source_url:sourceUrl,
-        note:manualNote||autoNote(city,category,address,vegan),
+        opening_hours:openingHours,
+        note:manualNote||autoNote(city,category,vegan),
         vegan
       };
 
-      if(!apiReady()) throw new Error("Сначала подключи Supabase в config.js");
-      status.textContent="Сохраняю…";
+      if(!apiReady())throw new Error("Сначала подключи Supabase в config.js");
 
+      status.textContent="Сохраняю…";
       const r=await fetch(`${cfg.supabaseUrl}/rest/v1/places`,{
         method:"POST",
         headers:{...apiHeaders(),"Prefer":"return=representation"},
         body:JSON.stringify(row)
       });
-      if(!r.ok) throw new Error(await r.text());
+      if(!r.ok)throw new Error(await r.text());
 
       const created=await r.json();
       places.push(created[0]);
@@ -209,7 +248,7 @@
       selectCity(row.city);
     }catch(err){
       status.className="form-status error";
-      status.textContent=err.message||"Ошибка сохранения";
+      status.textContent=err?.message||"Не удалось сохранить точку. Попробуй ещё раз.";
     }
   });
 

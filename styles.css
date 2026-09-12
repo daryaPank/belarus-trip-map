@@ -86,3 +86,19 @@ textarea{min-height:70px;resize:vertical}
   .form-card{max-width:560px;margin:0 auto 20px;border-radius:20px}
   .modal{align-items:center}
 }
+
+
+.hours-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin-top:8px;
+  max-width:100%;
+  padding:6px 9px;
+  border-radius:10px;
+  background:#f1f1ed;
+  color:#4f4f4a;
+  font-size:11px;
+  line-height:1.25;
+  white-space:normal;
+}
