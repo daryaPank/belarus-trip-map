@@ -8,18 +8,27 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" crossorigin="anonymous">
   <link rel="stylesheet" href="./styles.css">
   <title>Карта поездки</title>
 </head>
 <body>
 <div class="app">
   <header>
-    <div class="topline"><h1>Карта поездки</h1><span class="editor-badge" id="modeLabel"></span></div>
+    <div class="topline">
+      <h1>Карта поездки</h1>
+      <div class="top-actions">
+        <span class="editor-badge" id="modeLabel"></span>
+        <button class="offline-btn" id="offlineBtn" type="button">↓ Офлайн</button>
+      </div>
+    </div>
+
     <nav class="tabs" aria-label="Город">
       <button class="tab" data-city="minsk">Минск</button>
       <button class="tab" data-city="brest">Брест</button>
       <button class="tab" data-city="grodno" aria-selected="true">Гродно</button>
     </nav>
+
     <div class="filters" aria-label="Категория">
       <button class="filter active" data-filter="all">Все</button>
       <button class="filter" data-filter="history">История</button>
@@ -27,60 +36,154 @@
       <button class="filter" data-filter="park">Парки</button>
       <button class="filter" data-filter="food">Еда</button>
       <button class="filter" data-filter="coffee">Кофе</button>
+      <button class="filter" data-filter="souvenir">Сувениры</button>
     </div>
   </header>
 
   <main>
     <div id="map">
       <div class="empty" id="empty">Для этого города точек пока нет.</div>
+
       <div class="map-controls">
         <button id="zoomIn" type="button" aria-label="Увеличить">+</button>
         <button id="zoomOut" type="button" aria-label="Уменьшить">−</button>
       </div>
+
+      <button class="hours-refresh-btn" id="hoursRefreshBtn" type="button">↻ Часы</button>
       <button class="add-btn" id="addBtn" type="button">+ Добавить</button>
 
       <section class="sheet" id="sheet" aria-live="polite">
         <div class="handle"></div>
         <div class="sheet-head">
-          <div><h2 id="placeTitle"></h2><div class="tags" id="placeTags"></div></div>
-          <button class="close" id="closeSheet" type="button">×</button>
+          <div>
+            <h2 id="placeTitle"></h2>
+            <div class="tags" id="placeTags"></div>
+          </div>
+          <button class="close" id="closeSheet" type="button" aria-label="Закрыть">×</button>
         </div>
+
         <p id="placeText"></p>
         <p class="address" id="placeAddress"></p>
         <div class="hours-chip" id="placeHours" hidden></div>
         <p class="source" id="placeSource"></p>
+        <button class="edit-btn" id="editBtn" type="button">Редактировать</button>
       </section>
 
-      <div class="attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></div>
+      <div class="attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Protomaps</div>
     </div>
 
     <div class="modal" id="modal" role="dialog" aria-modal="true">
       <form class="form-card" id="placeForm">
         <div class="handle"></div>
-        <h2>Добавить точку</h2>
+        <h2 id="formTitle">Добавить точку</h2>
+
         <div class="form-grid">
-          <div class="field full"><label for="name">Название</label><input id="name" name="name" required></div>
-          <div class="field"><label for="city">Город</label>
-            <select id="city" name="city"><option value="minsk">Минск</option><option value="brest">Брест</option><option value="grodno">Гродно</option></select>
+          <div class="field full">
+            <label for="name">Название</label>
+            <input id="name" name="name" required>
           </div>
-          <div class="field"><label for="category">Категория</label>
-            <select id="category" name="category">
-              <option value="history">История / архитектура</option><option value="beautiful">Красивая локация</option>
-              <option value="park">Парк</option><option value="food">Еда</option><option value="coffee">Кофейня</option>
+
+          <div class="field">
+            <label for="city">Город</label>
+            <select id="city" name="city">
+              <option value="minsk">Минск</option>
+              <option value="brest">Брест</option>
+              <option value="grodno">Гродно</option>
             </select>
           </div>
-          <div class="field full"><label for="address">Адрес</label><input id="address" name="address" placeholder="Например: Комсомольская 32" required></div>
-          <div class="field full"><label for="source">Ссылка-источник</label><input id="source" name="source" type="url" placeholder="Instagram / сайт / карта"></div>
-          <div class="field full"><label for="opening_hours">График работы</label><input id="opening_hours" name="opening_hours" placeholder="Например: Пн–Пт 09:00–22:00; Сб–Вс 10:00–23:00"></div>
-          <div class="field full"><label for="note">Короткая заметка</label><textarea id="note" name="note"></textarea></div>
-          <label class="vegan-row full" id="veganRow"><input type="checkbox" id="vegan" name="vegan"> 🌿 Vegan-friendly</label>
+
+          <div class="field">
+            <label for="category">Категория</label>
+            <select id="category" name="category">
+              <option value="history">История / архитектура</option>
+              <option value="beautiful">Красивая локация</option>
+              <option value="park">Парк</option>
+              <option value="food">Еда</option>
+              <option value="coffee">Кофейня</option>
+              <option value="souvenir">Сувениры</option>
+            </select>
+          </div>
+
+          <div class="field full">
+            <label for="address">Адрес</label>
+            <input id="address" name="address" placeholder="Например: Комсомольская 32" required>
+          </div>
+
+          <div class="field full">
+            <label for="source">Ссылка-источник</label>
+            <input id="source" name="source" type="url" placeholder="Instagram / сайт / карта">
+          </div>
+
+          <div class="field full schedule-editor">
+            <label>График работы</label>
+            <p class="field-help">Выбери дни, затем время открытия и закрытия. На iPhone время выбирается системным picker.</p>
+
+            <div class="day-picker" id="dayPicker">
+              <button type="button" data-day="1">Пн</button>
+              <button type="button" data-day="2">Вт</button>
+              <button type="button" data-day="3">Ср</button>
+              <button type="button" data-day="4">Чт</button>
+              <button type="button" data-day="5">Пт</button>
+              <button type="button" data-day="6">Сб</button>
+              <button type="button" data-day="7">Вс</button>
+            </div>
+
+            <div class="time-row">
+              <div class="time-field">
+                <span>Открытие</span>
+                <input type="time" id="openTime" value="09:00" step="300">
+              </div>
+              <div class="time-arrow">→</div>
+              <div class="time-field">
+                <span>Закрытие</span>
+                <input type="time" id="closeTime" value="22:00" step="300">
+              </div>
+            </div>
+
+            <div class="schedule-actions">
+              <label class="closed-toggle"><input type="checkbox" id="closedDay"> Закрыто</label>
+              <button type="button" id="applyHoursBtn">Применить к дням</button>
+            </div>
+
+            <div class="schedule-preview" id="schedulePreview">График не задан</div>
+            <button class="clear-schedule" type="button" id="clearScheduleBtn">Очистить график</button>
+          </div>
+
+          <div class="field full">
+            <label for="note">Короткая заметка</label>
+            <textarea id="note" name="note"></textarea>
+          </div>
+
+          <label class="vegan-row full" id="veganRow">
+            <input type="checkbox" id="vegan" name="vegan"> 🌿 Vegan-friendly
+          </label>
         </div>
-        <div class="actions"><button type="button" id="cancelBtn">Отмена</button><button class="save" type="submit">Сохранить</button></div>
+
+        <div class="actions">
+          <button type="button" id="cancelBtn">Отмена</button>
+          <button class="save" type="submit">Сохранить</button>
+        </div>
         <div class="form-status" id="formStatus"></div>
       </form>
     </div>
+
+    <div class="modal compact-modal" id="offlineModal" role="dialog" aria-modal="true">
+      <div class="form-card offline-card">
+        <div class="handle"></div>
+        <h2>Офлайн-карты</h2>
+        <p class="offline-copy">Скачать карты Минска, Бреста и Гродно на этот iPhone. После загрузки фон карты и сохранённые точки будут доступны без мобильного интернета.</p>
+        <div class="download-progress" id="offlineStatus">Не скачано</div>
+        <div class="actions">
+          <button type="button" id="offlineCancelBtn">Закрыть</button>
+          <button class="save" type="button" id="offlineDownloadBtn">Скачать</button>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
+
+<script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js" crossorigin="anonymous"></script>
 <script src="./config.js"></script>
 <script src="./app.js"></script>
 </body>
