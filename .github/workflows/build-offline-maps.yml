@@ -10,7 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      PLANET_URL: https://build.protomaps.com/20260730.pmtiles
       PMTILES_IMAGE: ghcr.io/protomaps/go-pmtiles:v1.31.2
 
     steps:
@@ -20,20 +19,69 @@ jobs:
       - name: Pull PMTiles CLI image
         run: |
           docker pull "$PMTILES_IMAGE"
-          docker run --rm "$PMTILES_IMAGE" version || true
+
+      - name: Find latest available Protomaps build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FOUND=""
+          for OFFSET in 0 1 2 3 4 5 6; do
+            DATE=$(date -u -d "-${OFFSET} day" +%Y%m%d)
+            URL="https://build.protomaps.com/${DATE}.pmtiles"
+            echo "Checking ${URL}"
+
+            STATUS=$(curl -L -s -o /dev/null -w "%{http_code}" \
+              -H "Range: bytes=0-0" \
+              "$URL" || true)
+
+            if [ "$STATUS" = "206" ] || [ "$STATUS" = "200" ]; then
+              FOUND="$URL"
+              break
+            fi
+          done
+
+          if [ -z "$FOUND" ]; then
+            echo "Could not find a Protomaps daily build from the last 7 days."
+            exit 1
+          fi
+
+          echo "PLANET_URL=$FOUND" >> "$GITHUB_ENV"
+          echo "Using $FOUND"
 
       - name: Extract Minsk
         run: |
           mkdir -p maps
-          docker run --rm             -v "$PWD:/work"             -w /work             "$PMTILES_IMAGE"             extract "$PLANET_URL" maps/minsk.pmtiles             --bbox=27.30,53.75,27.85,54.06             --maxzoom=15             --overfetch=0
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            "$PMTILES_IMAGE" \
+            extract "$PLANET_URL" maps/minsk.pmtiles \
+            --bbox=27.30,53.75,27.85,54.06 \
+            --maxzoom=15 \
+            --overfetch=0
 
       - name: Extract Brest
         run: |
-          docker run --rm             -v "$PWD:/work"             -w /work             "$PMTILES_IMAGE"             extract "$PLANET_URL" maps/brest.pmtiles             --bbox=23.52,51.97,23.95,52.23             --maxzoom=15             --overfetch=0
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            "$PMTILES_IMAGE" \
+            extract "$PLANET_URL" maps/brest.pmtiles \
+            --bbox=23.52,51.97,23.95,52.23 \
+            --maxzoom=15 \
+            --overfetch=0
 
       - name: Extract Grodno
         run: |
-          docker run --rm             -v "$PWD:/work"             -w /work             "$PMTILES_IMAGE"             extract "$PLANET_URL" maps/grodno.pmtiles             --bbox=23.60,53.55,24.02,53.82             --maxzoom=15             --overfetch=0
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            "$PMTILES_IMAGE" \
+            extract "$PLANET_URL" maps/grodno.pmtiles \
+            --bbox=23.60,53.55,24.02,53.82 \
+            --maxzoom=15 \
+            --overfetch=0
 
       - name: Show sizes
         run: |
