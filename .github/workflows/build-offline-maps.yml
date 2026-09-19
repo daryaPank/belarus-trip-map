@@ -11,33 +11,33 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLANET_URL: https://build.protomaps.com/20260730.pmtiles
+      PMTILES_IMAGE: ghcr.io/protomaps/go-pmtiles:v1.31.2
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install PMTiles CLI
+      - name: Pull PMTiles CLI image
         run: |
-          curl -L             https://github.com/protomaps/go-pmtiles/releases/download/v1.22.3/go-pmtiles_1.22.3_Linux_x86_64.tar.gz             -o /tmp/pmtiles.tar.gz
-          tar -xzf /tmp/pmtiles.tar.gz -C /tmp pmtiles
-          chmod +x /tmp/pmtiles
-          /tmp/pmtiles --version
+          docker pull "$PMTILES_IMAGE"
+          docker run --rm "$PMTILES_IMAGE" version || true
 
       - name: Extract Minsk
         run: |
           mkdir -p maps
-          /tmp/pmtiles extract "$PLANET_URL" maps/minsk.pmtiles             --bbox=27.30,53.75,27.85,54.06             --maxzoom=15
+          docker run --rm             -v "$PWD:/work"             -w /work             "$PMTILES_IMAGE"             extract "$PLANET_URL" maps/minsk.pmtiles             --bbox=27.30,53.75,27.85,54.06             --maxzoom=15             --overfetch=0
 
       - name: Extract Brest
         run: |
-          /tmp/pmtiles extract "$PLANET_URL" maps/brest.pmtiles             --bbox=23.52,51.97,23.95,52.23             --maxzoom=15
+          docker run --rm             -v "$PWD:/work"             -w /work             "$PMTILES_IMAGE"             extract "$PLANET_URL" maps/brest.pmtiles             --bbox=23.52,51.97,23.95,52.23             --maxzoom=15             --overfetch=0
 
       - name: Extract Grodno
         run: |
-          /tmp/pmtiles extract "$PLANET_URL" maps/grodno.pmtiles             --bbox=23.60,53.55,24.02,53.82             --maxzoom=15
+          docker run --rm             -v "$PWD:/work"             -w /work             "$PMTILES_IMAGE"             extract "$PLANET_URL" maps/grodno.pmtiles             --bbox=23.60,53.55,24.02,53.82             --maxzoom=15             --overfetch=0
 
       - name: Show sizes
-        run: ls -lh maps/*.pmtiles
+        run: |
+          ls -lh maps/*.pmtiles
 
       - name: Commit map packs
         run: |
